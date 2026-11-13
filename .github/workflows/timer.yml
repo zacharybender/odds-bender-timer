@@ -1,0 +1,52 @@
+name: timer
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Data updates (Eastern time): 3:40 and 10:10 am, hourly 12:25-4:25 pm, every half hour 5:25-10:55 pm.
+    - cron: "40 3 * * *"
+      timezone: "America/New_York"
+    - cron: "10 10 * * *"
+      timezone: "America/New_York"
+    - cron: "25 12-16 * * *"
+      timezone: "America/New_York"
+    - cron: "25,55 17-22 * * *"
+      timezone: "America/New_York"
+    # Stage 0 probe (UTC), until 2026-11-20.
+    - cron: "10 11-14 * * *"
+    - cron: "10,40 15-23 * * *"
+    - cron: "10,40 0-4 * * *"
+    # Temporary heartbeat to confirm this timer fires; removed once confirmed.
+    - cron: "*/10 * * * *"
+
+permissions: {}
+
+jobs:
+  data:
+    if: github.event_name == 'workflow_dispatch' || contains(fromJSON('["40 3 * * *","10 10 * * *","25 12-16 * * *","25,55 17-22 * * *"]'), github.event.schedule)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Start the data update
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: gh workflow run data.yml -R zacharybender/BetGuide
+
+  probe:
+    if: github.event_name == 'workflow_dispatch' || contains(fromJSON('["10 11-14 * * *","10,40 15-23 * * *","10,40 0-4 * * *"]'), github.event.schedule)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Start the stage 0 probe (until 2026-11-20)
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          if [ "$(date -u +%F)" \> "2026-11-20" ]; then echo "Probe window over."; exit 0; fi
+          gh workflow run probe.yml -R zacharybender/BetGuide
+
+  heartbeat:
+    if: github.event.schedule == '*/10 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "Timer fired at $(date -u +%FT%TZ)"
